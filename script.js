@@ -3,8 +3,97 @@
    - Works with: index.html, history.html, organizations.html
    - Uses localStorage (saved in this browser)
    - Uses modal UI (Log Hours / Add Organization)
-   - Adds: edit/delete history entries, edit org contacts from ⋮ button
+   - PASSWORD LOCK: Owner vs View-only
    ========================= */
+
+/* ---------- PASSWORD LOCK (Owner vs View-only) ---------- */
+/* ✅ Change this password */
+const OWNER_PASSWORD = "CHANGE_THIS_PASSWORD";
+
+/*
+  sessionStorage values:
+  - vh_role = "owner"  -> can add/edit/delete
+  - vh_role = "viewer" -> view-only (no edits)
+*/
+function getRole(){
+  return sessionStorage.getItem("vh_role") || "";
+}
+function isOwner(){
+  return getRole() === "owner";
+}
+function setViewer(){
+  sessionStorage.setItem("vh_role","viewer");
+}
+function setOwner(){
+  sessionStorage.setItem("vh_role","owner");
+}
+
+/* shows a choice every time you try to edit:
+   - enter password (owner)
+   - or "not owner: view only"
+*/
+function askForAccess(){
+  // if already chosen this tab, keep it
+  if(getRole()==="owner" || getRole()==="viewer") return getRole();
+
+  const wantsOwner = confirm(
+    "Owner access?\n\nOK = I am the owner (enter password)\nCancel = Not owner (view only)"
+  );
+
+  if(!wantsOwner){
+    setViewer();
+    alert("View-only mode enabled.");
+    return "viewer";
+  }
+
+  const pw = prompt("Enter owner password:");
+  if(pw === OWNER_PASSWORD){
+    setOwner();
+    alert("Owner mode enabled.");
+    return "owner";
+  }
+
+  setViewer();
+  alert("Wrong password. View-only mode enabled.");
+  return "viewer";
+}
+
+function requireOwner(){
+  if(isOwner()) return true;
+  askForAccess();
+  if(isOwner()) return true;
+  alert("View-only mode: you can’t add/edit/delete.");
+  return false;
+}
+
+/* Disable/enable UI based on role */
+function applyRoleUI(){
+  // Hide/disable buttons that change data if not owner
+  const ownerOnlySelectors = [
+    "#logHoursBtn",
+    "#addOrgBtn"
+  ];
+
+  const viewer = !isOwner();
+
+  ownerOnlySelectors.forEach(sel=>{
+    const el = document.querySelector(sel);
+    if(!el) return;
+    el.disabled = viewer;
+    el.style.opacity = viewer ? "0.6" : "1";
+    el.style.cursor = viewer ? "not-allowed" : "pointer";
+    if(viewer) el.setAttribute("title","View-only mode");
+    else el.removeAttribute("title");
+  });
+
+  // If modal is open and user is viewer, close it
+  if(viewer){
+    const overlay = document.getElementById("modalOverlay");
+    if(overlay && overlay.classList.contains("show")){
+      overlay.classList.remove("show");
+    }
+  }
+}
 
 /* ---------- Helpers ---------- */
 function $(id){ return document.getElementById(id); }
@@ -31,9 +120,8 @@ function newestFirst(data){
   return data.slice().sort((a,b)=>parseDate(b.date)-parseDate(a.date));
 }
 
-function uid(){
-  if (window.crypto?.randomUUID) return crypto.randomUUID();
-  return "id_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,9);
+function makeId(){
+  return "e_" + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
 }
 
 /* ---------- Storage ---------- */
@@ -43,15 +131,18 @@ const ORGS_KEY    = "vh_orgs_v1";
 function loadEntries(){
   try{
     const raw = localStorage.getItem(ENTRIES_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw){
+      const list = JSON.parse(raw);
+      list.forEach(e=>{ if(!e.id) e.id = makeId(); });
+      return list;
+    }
   }catch(e){}
-
-  // fallback starter data if you still have data.js
-  // IMPORTANT: if your data.js uses const volunteerData, it must be a normal <script> (not type="module")
-  // best: window.volunteerData = [...]
-  return (typeof volunteerData !== "undefined" && Array.isArray(volunteerData))
-    ? volunteerData.slice()
-    : [];
+  const starter =
+    (typeof volunteerData !== "undefined" && Array.isArray(volunteerData))
+      ? volunteerData.slice()
+      : [];
+  starter.forEach(e=>{ if(!e.id) e.id = makeId(); });
+  return starter;
 }
 
 function saveEntries(list){
@@ -74,17 +165,6 @@ function saveOrgs(map){
 
 let entries = loadEntries();
 let orgs    = loadOrgs();
-
-/* Ensure every entry has an id (needed for edit/delete) */
-let changedIds = false;
-entries = entries.map(e=>{
-  if(!e.id){
-    changedIds = true;
-    return { ...e, id: uid() };
-  }
-  return e;
-});
-if(changedIds) saveEntries(entries);
 
 /* ---------- Calculations ---------- */
 function calcTotals(data){
@@ -122,7 +202,7 @@ function orgPrimaryCategory(org){
 }
 
 /* =========================
-   Renderers
+   Page Renderers
    ========================= */
 
 /* ---------- Dashboard ---------- */
@@ -172,8 +252,6 @@ function monthLabel(d){
 function renderChart(){
   const canvas = $("hoursChart");
   if(!canvas) return;
-
-  // If you don't include Chart.js, we just won't draw
   if(typeof Chart === "undefined") return;
 
   const sorted = newestFirst(entries);
@@ -219,7 +297,7 @@ function renderChart(){
   });
 }
 
-/* ---------- History (with Edit/Delete) ---------- */
+/* ---------- History ---------- */
 function renderHistory(){
   if(!$("historyList")) return;
 
@@ -228,7 +306,6 @@ function renderHistory(){
   const list = $("historyList");
   const stats = $("historyStats");
 
-  // fill dropdown once
   if(select && select.dataset.filled !== "1"){
     const cats = Array.from(new Set(entries.map(e=>e.category || "Community Service"))).sort();
     cats.forEach(c=>{
@@ -249,7 +326,7 @@ function renderHistory(){
         String(e.organization||"").toLowerCase().includes(q) ||
         String(e.activity||"").toLowerCase().includes(q);
 
-      const matchCat = (cat==="all") ? true : ((e.category||"Community Service")===cat);
+      const matchCat = (cat==="all") ? true : (e.category===cat);
       return matchText && matchCat;
     });
 
@@ -261,7 +338,7 @@ function renderHistory(){
         <div class="badgeIcon">📄</div>
         <div style="flex:1;">
           <div class="itemTop">
-            <div style="min-width:0;">
+            <div>
               <div class="itemTitle">${safeText(e.activity)}</div>
               <div class="itemMeta">
                 <span>🏢 ${safeText(e.organization)}</span>
@@ -274,10 +351,25 @@ function renderHistory(){
               </div>
             </div>
 
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex; gap:8px; align-items:center;">
               <span class="pill">⏱ ${safeText(e.hours)}h</span>
-              <button class="btnGhost" type="button" data-action="edit" data-id="${safeText(e.id)}">Edit</button>
-              <button class="btnGhost" type="button" data-action="delete" data-id="${safeText(e.id)}">Delete</button>
+
+              <button type="button"
+                      class="btnGhost editEntryBtn"
+                      data-id="${safeText(e.id)}"
+                      style="padding:8px 10px;border-radius:12px;font-weight:900;"
+                      ${isOwner() ? "" : "disabled"}
+                      title="${isOwner() ? "" : "View-only mode"}">
+                ✏ Edit
+              </button>
+              <button type="button"
+                      class="btnGhost deleteEntryBtn"
+                      data-id="${safeText(e.id)}"
+                      style="padding:8px 10px;border-radius:12px;font-weight:900;"
+                      ${isOwner() ? "" : "disabled"}
+                      title="${isOwner() ? "" : "View-only mode"}">
+                🗑 Delete
+              </button>
             </div>
           </div>
         </div>
@@ -298,42 +390,51 @@ function renderHistory(){
     select.dataset.hooked = "1";
   }
 
-  // Edit/Delete clicks (event delegation)
-  if(list && !list.dataset.hooked){
-    list.addEventListener("click", (ev)=>{
-      const btn = ev.target.closest("button[data-action]");
-      if(!btn) return;
-
-      const action = btn.dataset.action;
-      const id = btn.dataset.id;
-
-      if(action === "delete"){
-        const ok = confirm("Delete this log entry?");
-        if(!ok) return;
-
-        entries = entries.filter(e=>e.id !== id);
-        saveEntries(entries);
-
-        renderDashboard();
-        renderHistory();
-        renderOrganizations();
-        return;
-      }
-
-      if(action === "edit"){
-        const entry = entries.find(e=>e.id === id);
-        if(!entry) return;
-
-        showModal("log", { mode:"edit", entry });
-      }
-    });
-    list.dataset.hooked = "1";
-  }
-
   apply();
+  hookHistoryActions();
 }
 
-/* ---------- Organizations (⋮ opens edit contact modal) ---------- */
+/* history edit/delete buttons (locked) */
+function hookHistoryActions(){
+  const list = $("historyList");
+  if(!list || list.dataset.actionsHooked === "1") return;
+
+  list.addEventListener("click", (e)=>{
+    const editBtn = e.target.closest?.(".editEntryBtn");
+    const delBtn  = e.target.closest?.(".deleteEntryBtn");
+
+    if(delBtn){
+      if(!requireOwner()) return;
+      const id = delBtn.getAttribute("data-id");
+      const idx = entries.findIndex(x=>x.id === id);
+      if(idx === -1) return;
+      if(!confirm("Delete this log?")) return;
+      entries.splice(idx,1);
+      saveEntries(entries);
+      rerenderAll();
+      return;
+    }
+
+    if(editBtn){
+      if(!requireOwner()) return;
+      const id = editBtn.getAttribute("data-id");
+      const entry = entries.find(x=>x.id === id);
+      if(!entry) return;
+
+      showModal("log", { mode:"edit", entryId:id });
+      $("fOrg").value = entry.organization || "";
+      $("fActivity").value = entry.activity || "";
+      $("fDate").value = entry.date || new Date().toISOString().slice(0,10);
+      $("fHours").value = entry.hours ?? "";
+      $("fCategory").value = entry.category || "Community Service";
+      return;
+    }
+  });
+
+  list.dataset.actionsHooked = "1";
+}
+
+/* ---------- Organizations ---------- */
 function renderOrganizations(){
   if(!$("orgGrid")) return;
 
@@ -371,7 +472,10 @@ function renderOrganizations(){
           <div class="tag">${safeText(x.category)}</div>
         </div>
 
-        <button class="orgMenuBtn" type="button" data-org="${safeText(x.org)}" aria-label="Edit organization">
+        <button class="orgMenuBtn" type="button" data-org="${safeText(x.org)}" aria-label="Edit organization"
+                style="border:none;background:transparent;color:#94a3b8;font-weight:900;font-size:18px;cursor:pointer;"
+                ${isOwner() ? "" : "disabled"}
+                title="${isOwner() ? "" : "View-only mode"}">
           ⋮
         </button>
       </div>
@@ -392,32 +496,42 @@ function renderOrganizations(){
     grid.appendChild(card);
   });
 
-  // Click ⋮ to edit that org contact
-  if(!grid.dataset.hooked){
-    grid.addEventListener("click", (ev)=>{
-      const btn = ev.target.closest(".orgMenuBtn");
-      if(!btn) return;
-
-      const orgName = btn.dataset.org;
-      const contact = orgs[orgName] || { person:"", email:"" };
-
-      showModal("org", {
-        mode: "edit",
-        orgName,
-        person: contact.person || "",
-        email: contact.email || ""
-      });
-    });
-    grid.dataset.hooked = "1";
-  }
+  hookOrgMenu();
 }
 
-/* =========================
-   Modals
-   ========================= */
+function hookOrgMenu(){
+  const grid = $("orgGrid");
+  if(!grid || grid.dataset.menuHooked === "1") return;
 
-let editingLogId = null;     // when editing a log entry
-let editingOrgName = null;   // when editing an org contact
+  grid.addEventListener("click", (e)=>{
+    const btn = e.target.closest?.(".orgMenuBtn");
+    if(!btn) return;
+    if(!requireOwner()) return;
+
+    const orgName = btn.getAttribute("data-org");
+    if(!orgName) return;
+
+    showModal("org");
+
+    if($("oName")){
+      $("oName").value = orgName;
+      $("oName").disabled = true;
+    }
+
+    const c = orgs[orgName] || {};
+    if($("oPerson")) $("oPerson").value = (c.person && c.person !== "(add contact)") ? c.person : "";
+    if($("oEmail"))  $("oEmail").value  = (c.email  && c.email  !== "(add email)")   ? c.email  : "";
+
+    const submitBtn = document.querySelector("#orgForm .btnPrimary");
+    if(submitBtn) submitBtn.textContent = "Save Contact";
+  });
+
+  grid.dataset.menuHooked = "1";
+}
+
+/* ---------- Modals ---------- */
+let _logMode = "add";
+let _editEntryId = null;
 
 function setErr(id, msg){
   const el = $(id);
@@ -437,19 +551,27 @@ function closeModal(){
   const overlay = $("modalOverlay");
   if(overlay) overlay.classList.remove("show");
 
-  editingLogId = null;
-  editingOrgName = null;
+  const logForm = $("logForm");
+  const orgForm = $("orgForm");
 
-  if($("logForm")) $("logForm").reset();
-  if($("orgForm")) $("orgForm").reset();
+  if(logForm) logForm.reset();
+  if(orgForm) orgForm.reset();
+
+  if($("oName")) $("oName").disabled = false;
+
   clearErr("logError");
   clearErr("orgError");
 
-  // re-enable org name input by default
-  if($("oName")) $("oName").disabled = false;
+  _logMode = "add";
+  _editEntryId = null;
+
+  const logSubmit = document.querySelector("#logForm .btnPrimary");
+  if(logSubmit) logSubmit.textContent = "Save Hours";
+  const orgSubmit = document.querySelector("#orgForm .btnPrimary");
+  if(orgSubmit) orgSubmit.textContent = "Add Organization";
 }
 
-function showModal(kind, payload={}){
+function showModal(kind, opts={}){
   const overlay = $("modalOverlay");
   if(!overlay) return;
 
@@ -462,72 +584,52 @@ function showModal(kind, payload={}){
   overlay.classList.add("show");
 
   if(kind === "log"){
-    if($("modalTitle")) $("modalTitle").textContent = (payload.mode==="edit") ? "Edit Hours" : "Log Hours";
-    if($("modalSub"))   $("modalSub").textContent   = (payload.mode==="edit") ? "Update this volunteer session" : "Add a volunteer session";
+    _logMode = opts.mode || "add";
+    _editEntryId = opts.entryId || null;
+
+    if($("modalTitle")) $("modalTitle").textContent = (_logMode === "edit") ? "Edit Log" : "Log Hours";
+    if($("modalSub"))   $("modalSub").textContent   = (_logMode === "edit") ? "Update this volunteer session" : "Add a volunteer session";
 
     if(logForm) logForm.style.display = "block";
     if(orgForm) orgForm.style.display = "none";
 
-    const e = payload.entry;
+    const submitBtn = document.querySelector("#logForm .btnPrimary");
+    if(submitBtn) submitBtn.textContent = (_logMode === "edit") ? "Save Changes" : "Save Hours";
 
-    if(payload.mode==="edit" && e){
-      editingLogId = e.id;
-
-      if($("fOrg")) $("fOrg").value = e.organization || "";
-      if($("fActivity")) $("fActivity").value = e.activity || "";
-      if($("fDate")) $("fDate").value = e.date || new Date().toISOString().slice(0,10);
-      if($("fHours")) $("fHours").value = String(e.hours ?? "");
-      if($("fCategory")) $("fCategory").value = e.category || "Community Service";
-    }else{
-      editingLogId = null;
-      if($("fDate")) $("fDate").value = new Date().toISOString().slice(0,10);
-      if($("fOrg")) $("fOrg").focus();
-    }
-
-    return;
-  }
-
-  // org modal
-  if($("modalTitle")) $("modalTitle").textContent = (payload.mode==="edit") ? "Update Contact" : "Add Organization";
-  if($("modalSub"))   $("modalSub").textContent   = (payload.mode==="edit") ? "Edit organization contact info" : "Save an organization contact";
-
-  if(logForm) logForm.style.display = "none";
-  if(orgForm) orgForm.style.display = "block";
-
-  if(payload.mode==="edit"){
-    editingOrgName = payload.orgName || null;
-
-    if($("oName")) {
-      $("oName").value = payload.orgName || "";
-      $("oName").disabled = true; // keep org name fixed while editing
-    }
-    if($("oPerson")) $("oPerson").value = payload.person || "";
-    if($("oEmail"))  $("oEmail").value  = payload.email || "";
+    if($("fDate") && _logMode !== "edit") $("fDate").value = new Date().toISOString().slice(0,10);
+    if($("fOrg")) $("fOrg").focus();
   }else{
-    editingOrgName = null;
-    if($("oName")) {
-      $("oName").disabled = false;
-      $("oName").focus();
-    }
+    if($("modalTitle")) $("modalTitle").textContent = "Add Organization";
+    if($("modalSub"))   $("modalSub").textContent   = "Save an organization contact";
+
+    if(logForm) logForm.style.display = "none";
+    if(orgForm) orgForm.style.display = "block";
+
+    const submitBtn = document.querySelector("#orgForm .btnPrimary");
+    if(submitBtn) submitBtn.textContent = "Add Organization";
+
+    if($("oName")) $("oName").focus();
   }
 }
 
-/* =========================
-   Hooks
-   ========================= */
-
+/* ---------- Buttons + Events ---------- */
 function hookButtons(){
-  // open log modal buttons (Dashboard + History if present)
+  // open buttons (LOCKED)
   const logBtn = $("logHoursBtn");
   if(logBtn && !logBtn.dataset.hooked){
-    logBtn.addEventListener("click", ()=>showModal("log", { mode:"new" }));
+    logBtn.addEventListener("click", ()=>{
+      if(!requireOwner()) return;
+      showModal("log");
+    });
     logBtn.dataset.hooked = "1";
   }
 
-  // open add org modal button (Organizations page)
   const addOrgBtn = $("addOrgBtn");
   if(addOrgBtn && !addOrgBtn.dataset.hooked){
-    addOrgBtn.addEventListener("click", ()=>showModal("org", { mode:"new" }));
+    addOrgBtn.addEventListener("click", ()=>{
+      if(!requireOwner()) return;
+      showModal("org");
+    });
     addOrgBtn.dataset.hooked = "1";
   }
 
@@ -559,12 +661,12 @@ function hookButtons(){
     overlay.dataset.hooked = "1";
   }
 
-  // submit log hours (add OR edit)
+  // submit log hours (LOCKED)
   const logForm = $("logForm");
   if(logForm && !logForm.dataset.hooked){
     logForm.addEventListener("submit", (e)=>{
       e.preventDefault();
-      clearErr("logError");
+      if(!requireOwner()) return;
 
       const organization = ($("fOrg")?.value || "").trim();
       const activity = ($("fActivity")?.value || "").trim();
@@ -577,40 +679,34 @@ function hookButtons(){
       if(!date) return setErr("logError", "Please pick a date.");
       if(!Number.isFinite(hours) || hours <= 0) return setErr("logError", "Hours must be a number greater than 0.");
 
-      if(editingLogId){
-        const idx = entries.findIndex(x=>x.id === editingLogId);
-        if(idx !== -1){
-          entries[idx] = { ...entries[idx], organization, activity, date, hours, category };
-        }
+      if(_logMode === "edit" && _editEntryId){
+        const idx = entries.findIndex(x=>x.id === _editEntryId);
+        if(idx === -1) return setErr("logError", "Could not find that log to edit.");
+        entries[idx] = { ...entries[idx], organization, activity, date, hours, category };
       }else{
-        entries.push({ id: uid(), organization, activity, date, hours, category });
+        entries.push({ id: makeId(), organization, activity, date, hours, category });
       }
 
       saveEntries(entries);
 
-      // make placeholder org contact if missing
       if(!orgs[organization]){
         orgs[organization] = { person:"(add contact)", email:"(add email)" };
         saveOrgs(orgs);
       }
 
-      // IMPORTANT: these re-renders update totals + chart + recent + history
-      renderDashboard();
-      renderHistory();
-      renderOrganizations();
-
+      rerenderAll();
       closeModal();
     });
 
     logForm.dataset.hooked = "1";
   }
 
-  // submit add/update org contact
+  // submit add org / save contact (LOCKED)
   const orgForm = $("orgForm");
   if(orgForm && !orgForm.dataset.hooked){
     orgForm.addEventListener("submit", (e)=>{
       e.preventDefault();
-      clearErr("orgError");
+      if(!requireOwner()) return;
 
       const name = ($("oName")?.value || "").trim();
       const person = ($("oPerson")?.value || "").trim() || "(add contact)";
@@ -621,7 +717,7 @@ function hookButtons(){
       orgs[name] = { person, email };
       saveOrgs(orgs);
 
-      renderOrganizations();
+      rerenderAll();
       closeModal();
     });
 
@@ -629,10 +725,16 @@ function hookButtons(){
   }
 }
 
+function rerenderAll(){
+  renderDashboard();
+  renderHistory();
+  renderOrganizations();
+  applyRoleUI(); // keep buttons correct after rerender
+}
+
 /* =========================
    Boot
    ========================= */
 hookButtons();
-renderDashboard();
-renderHistory();
-renderOrganizations();
+rerenderAll();
+applyRoleUI();
