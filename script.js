@@ -8,7 +8,7 @@
 
 /* ---------- PASSWORD LOCK (Owner vs View-only) ---------- */
 /* ✅ Change this password */
-const OWNER_PASSWORD = "CHANGE_THIS_PASSWORD";
+const OWNER_PASSWORD = "2213144338";
 
 /*
   sessionStorage values:
@@ -738,3 +738,4 @@ function rerenderAll(){
 hookButtons();
 rerenderAll();
 applyRoleUI();
+
