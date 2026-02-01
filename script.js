@@ -41,7 +41,7 @@ const ORGS_KEY    = "vh_orgs_v1";
 */
 const ROLE_KEY = "vh_role";              // "owner" | "viewer"
 const OWNER_UNLOCKED_KEY = "vh_owner_unlocked"; // "1" means owner
-const OWNER_PASSWORD = "Saharsh123";     // <-- CHANGE THIS PASSWORD
+const OWNER_PASSWORD = "2213144338";     // <-- CHANGE THIS PASSWORD
 
 function isOwner(){
   return localStorage.getItem(OWNER_UNLOCKED_KEY) === "1";
@@ -652,3 +652,4 @@ hookButtons();
 renderDashboard();
 renderHistory();
 renderOrganizations();
+
