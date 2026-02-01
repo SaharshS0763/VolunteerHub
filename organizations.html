@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VolunteerHub - Organizations</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">❤</div>
+        <div class="title">VolunteerHub</div>
+      </div>
+
+      <div class="nav">
+        <a href="index.html">📊 Dashboard</a>
+        <a href="history.html">🕘 History</a>
+        <a class="active" href="organizations.html">🏢 Organizations</a>
+      </div>
+
+      <div class="sidebarFooter">
+        Saharsh Santhoshkumar
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h1 class="pageTitle">Organizations</h1>
+          <p class="pageSub" id="orgStats">Loading...</p>
+        </div>
+
+        <button class="btn" id="addOrgBtn">
+          <span class="plus">+</span> Add Organization
+        </button>
+      </div>
+
+      <section class="panel" style="margin-top:14px;">
+        <div class="orgGrid" id="orgGrid"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== Modals ===== -->
+  <div class="modalOverlay" id="modalOverlay">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modalHeader">
+        <div class="modalHeaderTop">
+          <div>
+            <h2 class="modalTitle" id="modalTitle">Modal</h2>
+            <p class="modalSub" id="modalSub">Fill out the info</p>
+          </div>
+          <button class="modalClose" id="modalClose" aria-label="Close">✕</button>
+        </div>
+      </div>
+
+      <div class="modalBody">
+        <!-- Log Hours Form (kept here, won’t hurt) -->
+        <form id="logForm" style="display:none;">
+          <div class="formGrid">
+            <div class="field full">
+              <div class="label">Organization</div>
+              <input class="input" id="fOrg" placeholder="ex: Vex Robotics" />
+            </div>
+
+            <div class="field full">
+              <div class="label">Activity</div>
+              <textarea class="textarea" id="fActivity" placeholder="What did you do?"></textarea>
+            </div>
+
+            <div class="field">
+              <div class="label">Date</div>
+              <input class="input" id="fDate" type="date" />
+            </div>
+
+            <div class="field">
+              <div class="label">Hours</div>
+              <input class="input" id="fHours" type="number" step="0.5" min="0.5" placeholder="ex: 2" />
+            </div>
+
+            <div class="field full">
+              <div class="label">Category</div>
+              <select class="select" id="fCategory">
+                <option>Community Service</option>
+                <option>Education</option>
+                <option>Healthcare</option>
+                <option>Youth Programs</option>
+                <option>Environment</option>
+                <option>Elderly Care</option>
+                <option>Animal Welfare</option>
+                <option>Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="formError" id="logError"></div>
+
+          <div class="modalFooter">
+            <div class="hint">Saves in your browser (localStorage)</div>
+            <div class="btnRow">
+              <button type="button" class="btnGhost" id="logCancel">Cancel</button>
+              <button type="submit" class="btnPrimary">Save Hours</button>
+            </div>
+          </div>
+        </form>
+
+        <!-- Add Organization Form -->
+        <form id="orgForm" style="display:none;">
+          <div class="formGrid">
+            <div class="field full">
+              <div class="label">Organization Name</div>
+              <input class="input" id="oName" placeholder="ex: Breast Cancer Hub" />
+            </div>
+
+            <div class="field">
+              <div class="label">Contact Person</div>
+              <input class="input" id="oPerson" placeholder="ex: Grace Lloyd" />
+            </div>
+
+            <div class="field">
+              <div class="label">Contact Email</div>
+              <input class="input" id="oEmail" placeholder="ex: name@email.com" />
+            </div>
+          </div>
+
+          <div class="formError" id="orgError"></div>
+
+          <div class="modalFooter">
+            <div class="hint">Tip: Log hours for it to show cards</div>
+            <div class="btnRow">
+              <button type="button" class="btnGhost" id="orgCancel">Cancel</button>
+              <button type="submit" class="btnPrimary">Add Organization</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ scripts -->
+  <script src="data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
